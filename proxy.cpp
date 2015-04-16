@@ -1,5 +1,15 @@
 #include <iostream>
+#include "hash_map.h"
 using namespace std;
+
+
+void checkCache(string reqest) {
+
+}
+
+void addToCache() {
+
+}
 
 int main ()
 {
