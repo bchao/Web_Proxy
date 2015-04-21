@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <string>
 #include <pthread.h>
+#include <stdlib.h>
 
 using namespace std;
 
@@ -15,16 +16,17 @@ using namespace std;
 /* Global Variables */
 const int MAX_BACK_LOG = 5;
 int server_port;
-int cache_size
+int cache_size;
 
 /* Function Prototypes */
 
-void* request_thread();
+void* request_thread(void* client_sock_value);
 void handle_browser_requests(int client_sock);
 string get_host_response(string request);
 string get_message(int sock, bool host);
 void send_message(int sock, string message);
-
+string check_cache(string request);
+void add_to_cache(string request, string response);
 
 int main (int argc, char* argv[])
 {
@@ -75,7 +77,7 @@ int main (int argc, char* argv[])
     // Use pthread_create to make new thread to and call requestThread
     pthread_t client_thread;
 
-    if ((pthread_create(&client_thread, NULL, request_thread, (void*) &client_sock) != 0)) {
+    if (pthread_create(&client_thread, NULL, request_thread, (void*) &client_sock) != 0) {
       cerr << "Error creating child process thread." << endl;
       close(client_sock);
       pthread_exit(NULL);
@@ -93,7 +95,7 @@ void* request_thread(void* client_sock_value) {
 
   // Do I need to detach the thread here???
 
-  handleBrowserRequests(client_sock);
+  handle_browser_requests(client_sock);
 
   close(client_sock);
 
@@ -107,14 +109,19 @@ void handle_browser_requests(int client_sock) {
 
   // Get request from browser
   request = get_message(client_sock, false);
+  cout << "===== REQUEST =====" << endl;
+  cout << request << endl;
 
   // Check if cache contains request, if so grab corresponding response
   response = check_cache(request);
 
   // If not, then connect with host to get response
-  if (response == "") {
+  if (response.empty()) {
     response = get_host_response(request);
   }
+
+  cout << "===== RESPONSE =====" << endl;
+  cout << request << endl;
 
   // Send the message response back to the client
   send_message(client_sock, response);
@@ -122,6 +129,8 @@ void handle_browser_requests(int client_sock) {
 }
 
 string get_host_response(string request) {
+
+  string response;
 
   // Extract host IP address from message
 
@@ -133,12 +142,26 @@ string get_host_response(string request) {
 
   // Get the response from host and return
 
+  return response;
+
 }
 
 string get_message(int sock, bool host) {
 
+  return "";
+
 }
 
 void send_message(int sock, string message) {
+
+}
+
+string check_cache(string request) {
+
+  return NULL;
+
+}
+
+void add_to_cache(string request, string response) {
 
 }
