@@ -208,8 +208,15 @@ void send_message(int sock, char * message) {
 }
 
 char * check_cache(char * request) {
+	node * n = myCache.nodeMap[request];
 
-  return NULL;
+	if(n) {
+		removeNode(n);
+		setHeadNode(n);
+		return n->val;
+	} else {
+		return NULL;
+	}
 }
 
 void add_to_cache(char * request, char * response) {
@@ -248,16 +255,4 @@ void setHeadNode (node *n) {
 	n->prev = myCache.head;
 	myCache.head->next = n;
 	n->next->prev = n;
-}
-
-char * get(char * k) {
-	node * n = myCache.nodeMap[k];
-
-	if(n) {
-		removeNode(n);
-		setHeadNode(n);
-		return n->val;
-	} else {
-		return NULL;
-	}
 }
