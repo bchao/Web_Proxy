@@ -7,26 +7,43 @@
 #include <string>
 #include <pthread.h>
 #include <stdlib.h>
+#include <vector>
+#include <map>
+#include <iterator> 
 
 using namespace std;
 
 /* Structs */
+struct node {
+	char *val;
+	int size;
+	node *next;
+	node *prev;
+};
 
+struct LRUCache {
+	map<char *, node*> nodeMap;
+	vector<node*> freeNodes;
+	node * head;
+	node * tail;
+	node * entries;
+};
 
 /* Global Variables */
 const int MAX_BACK_LOG = 5;
 int server_port;
 int cache_size;
+LRUCache myCache;
 
 /* Function Prototypes */
 
 void* request_thread(void* client_sock_value);
 void handle_browser_requests(int client_sock);
-string get_host_response(string request);
-string get_message(int sock, bool host);
-void send_message(int sock, string message);
-string check_cache(string request);
-void add_to_cache(string request, string response);
+char * get_host_response(char * request);
+char * get_message(int sock, bool host);
+void send_message(int sock, char * message);
+char * check_cache(char * request);
+void add_to_cache(char * request, char * response);
 
 int main (int argc, char* argv[])
 {
@@ -105,7 +122,7 @@ void* request_thread(void* client_sock_value) {
 
 void handle_browser_requests(int client_sock) {
 
-  string request, response;
+  char * request, response;
 
   // Get request from browser
   request = get_message(client_sock, false);
@@ -128,9 +145,9 @@ void handle_browser_requests(int client_sock) {
 
 }
 
-string get_host_response(string request) {
+char * get_host_response(char * request) {
 
-  string response;
+  char * response;
 
   // Extract host IP address from message
 
@@ -146,22 +163,68 @@ string get_host_response(string request) {
 
 }
 
-string get_message(int sock, bool host) {
+char * get_message(int sock, bool host) {
 
   return "";
 
 }
 
-void send_message(int sock, string message) {
+void send_message(int sock, char * message) {
 
 }
 
-string check_cache(string request) {
+char * check_cache(char * request) {
 
   return NULL;
 
 }
 
-void add_to_cache(string request, string response) {
+void add_to_cache(char * request, char * response) {
+	node * newNode = myCache.nodeMap[request];
 
+	// if node with key 'request' is found
+	if(newNode) {
+		removeNode(newNode);
+		newNode->val = response;
+		setHeadNode(newNode);
+	} else {
+		if(myCache.freeNodes.empty()) {
+			newNode = myCache.tail->prev;
+			removeNode(newNode);
+			myCache.nodeMap.erase(request);
+			newNode->val = val;
+			myCache.nodeMap[request] = newNode;
+			setHeadNode(newNode);
+		} else {
+			newNode = myCache.freeNodes.back();
+			myCache.freeNodes.pop_back();
+			newNode->val = val;
+			myCache.nodeMap[request] = newNode;
+			setHeadNode(newNode);
+		}
+	}
+}
+
+void removeNode (node *n) {
+	n->prev->next = n->next;
+	n->next->prev = n->prev;
+}
+
+void setHeadNode (node *n) {
+	n->next = myCache.head->next;
+	n->prev = myCache.head;
+	myCache.head->next = n;
+	n->next->prev = n;
+}
+
+char * get(char * k) {
+	node * n = myCache.nodeMap[k];
+
+	if(n) {
+		removeNode(n);
+		setHeadNode(n);
+		return n->val;
+	} else {
+		return NULL;
+	}
 }
