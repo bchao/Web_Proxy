@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <cstring>
 #include <signal.h>
+#include <vector>
+#include <map>
+#include <iterator> 
 
 using namespace std;
 
@@ -22,6 +25,22 @@ int server_port;
 int cache_size;
 
 /* Structs */
+struct node {
+	char * val;
+	int size;
+	node * next;
+	node * prev;
+};
+
+typedef struct LRUCache {
+	map<char *, node*> nodeMap;
+	vector<node*> freeNodes;
+	node * head;
+	node * tail;
+	node * entries;
+} LRUCache_t;
+
+LRUCache_t myCache;
 
 typedef struct thread_params {
   int sock;
@@ -34,7 +53,10 @@ void* handle_requests(void* input_params);
 void get_host_response(char * request, char * response);
 void send_message(int sock, char * message);
 int check_cache(char * request, char * response);
+void send_message(int sock, char * message);
 void add_to_cache(char * request, char * response);
+void removeNode (node *n);
+void setHeadNode (node *n);
 
 int main (int argc, char* argv[])
 {
@@ -52,6 +74,19 @@ int main (int argc, char* argv[])
   // Save server port and cache size as global variables
   server_port = atoi(argv[1]);
   cache_size = atoi(argv[2]);
+
+  // Initialize LRU Cache
+  myCache.entries = new node[cache_size];
+  for(int i = 0; i < cache_size; i++) {
+  	myCache.freeNodes.push_back(myCache.entries+i);
+  }
+  myCache.head = new node;
+  myCache.tail = new node;
+  myCache.head->prev = NULL;
+  myCache.head->next = myCache.tail;
+  myCache.tail->next = NULL;
+  myCache.tail->prev = myCache.head;
+
 
   // Ignore SIGPIPE signals
   signal(SIGPIPE, SIG_IGN);
@@ -198,11 +233,52 @@ void send_message(int sock, char * message) {
 }
 
 int check_cache(char * request, char * response) {
+	node * n = myCache.nodeMap[request];
 
-  return -1;
-
+	if(n) {
+		removeNode(n);
+		setHeadNode(n);
+    memcpy(response, n->val, MAX_RESPONSE_LENGTH);
+		return 1;
+	} else {
+		return -1;
+	}
 }
 
 void add_to_cache(char * request, char * response) {
+	node * newNode = myCache.nodeMap[request];
 
+	// if node with key 'request' is found
+	if(newNode) {
+		removeNode(newNode);
+		newNode->val = response;
+		setHeadNode(newNode);
+	} else {
+		if(myCache.freeNodes.empty()) {
+			newNode = myCache.tail->prev;
+			removeNode(newNode);
+			myCache.nodeMap.erase(request);
+			newNode->val = response;
+			myCache.nodeMap[request] = newNode;
+			setHeadNode(newNode);
+		} else {
+			newNode = myCache.freeNodes.back();
+			myCache.freeNodes.pop_back();
+			newNode->val = response;
+			myCache.nodeMap[request] = newNode;
+			setHeadNode(newNode);
+		}
+	}
+}
+
+void removeNode (node *n) {
+	n->prev->next = n->next;
+	n->next->prev = n->prev;
+}
+
+void setHeadNode (node *n) {
+	n->next = myCache.head->next;
+	n->prev = myCache.head;
+	myCache.head->next = n;
+	n->next->prev = n;
 }
