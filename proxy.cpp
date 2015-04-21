@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <string>
+#include <netdb.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <cstring>
@@ -16,6 +17,7 @@ using namespace std;
 
 #define MAX_BACK_LOG (5)
 #define MAX_REQUEST_LENGTH (1024)
+#define MAX_RESPONSE_LENGTH (8192)
 int server_port;
 int cache_size;
 
@@ -29,10 +31,10 @@ typedef struct thread_params {
 /* Function Prototypes */
 
 void* handle_requests(void* input_params);
-string get_host_response(string request);
-void send_message(int sock, string message);
-string check_cache(string request);
-void add_to_cache(string request, string response);
+void get_host_response(char * request, char * response);
+void send_message(int sock, char * message);
+int check_cache(char * request, char * response);
+void add_to_cache(char * request, char * response);
 
 int main (int argc, char* argv[])
 {
@@ -42,7 +44,7 @@ int main (int argc, char* argv[])
   char request[MAX_REQUEST_LENGTH];
 
   // Check to see if correct number of inputs
-  if (argc != 2) {
+  if (argc != 3) {
     cerr << "Wrong number of arguments." << endl;
     return 1;
   }
@@ -110,37 +112,64 @@ int main (int argc, char* argv[])
 
 void* handle_requests(void* input_params) {
 
-  string response;
   int client_sock;
-  char request[MAX_REQUEST_LENGTH];
+  char request[MAX_REQUEST_LENGTH], response[MAX_RESPONSE_LENGTH];
 
   memset(request, 0, MAX_REQUEST_LENGTH);
+  memset(response, 0, MAX_RESPONSE_LENGTH);
 
   // Copy data from input params
   thread_params_t * params = (thread_params_t *) input_params;
   client_sock = params->sock;
   memcpy(request, params->request, MAX_REQUEST_LENGTH);
 
-  cout << "===== REQUEST =====" << endl;
+  cout << "======== REQUEST ========" << endl;
   cout << request << endl;
 
   // Check if command is GET request
-  char * tok = strtok(request, " ");
-  if (strcmp(tok, "GET") != 0) {
+  char * request_type = strtok(request, " ");
+  if (strcmp(request_type, "GET") != 0) {
     cout << "Not GET command." << endl;
     return NULL;
   }
 
+  // Parse request to get PATH and HOST
+  char * request_path = strtok(NULL, " ");
+  strtok(NULL, "\n");
+  strtok(NULL, " ");
+  char * request_host = strtok(NULL, " ");
+
+  struct addrinfo * my_addrinfo;
+  struct addrinfo hints;
+  memset (&hints, 0, sizeof (hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+
+  if (getaddrinfo(request_host, "http", &hints, &my_addrinfo)) {
+    cerr << "Error resolving hostname for port." << endl;
+    return NULL;
+  }
+
+  // Get destination IP address from HTTP header
+  struct sockaddr_in * my_sockaddr = (struct sockaddr_in *) my_addrinfo->ai_addr;
+  char dest_ip[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &(my_sockaddr->sin_addr), dest_ip, INET_ADDRSTRLEN);
+
+  freeaddrinfo(my_addrinfo);
+
+  cout << "============= DEST IP ==============" << endl;
+  cout << dest_ip << endl;
+
   // Check if cache contains request, if so grab corresponding response
-  response = check_cache(request);
+  check_cache(request_path, response);
 
   // If not, then connect with host to get response
-  if (response.empty()) {
-    response = get_host_response(request);
+  if (response == NULL) {
+    get_host_response(request, response);
   }
 
   cout << "===== RESPONSE =====" << endl;
-  cout << request << endl;
+  cout << response << endl;
 
   // Send the message response back to the client
   send_message(client_sock, response);
@@ -150,9 +179,7 @@ void* handle_requests(void* input_params) {
 
 }
 
-string get_host_response(string request) {
-
-  string response;
+void get_host_response(char * request, char * response) {
 
   // Extract host IP address from message
 
@@ -164,20 +191,18 @@ string get_host_response(string request) {
 
   // Get the response from host and return
 
-  return response;
+}
+
+void send_message(int sock, char * message) {
 
 }
 
-void send_message(int sock, string message) {
+int check_cache(char * request, char * response) {
+
+  return -1;
 
 }
 
-string check_cache(string request) {
-
-  return NULL;
-
-}
-
-void add_to_cache(string request, string response) {
+void add_to_cache(char * request, char * response) {
 
 }
