@@ -140,8 +140,6 @@ int main (int argc, char* argv[])
       memset(params.request, 0, MAX_REQUEST_LENGTH);
       memcpy(params.request, request, MAX_REQUEST_LENGTH);
 
-      cout << "main: " << request;
-
       // Use pthread_create to make new thread to and call requestThread
       pthread_t client_thread;
 
@@ -177,8 +175,6 @@ void* handle_requests(void* input_params) {
   // cout << "======== REQUEST ========" << endl;
   // cout << request << endl;
   // cout << "======== REQUEST END ========" << endl;
-
-  cout << "not main: " << request;
 
   // Check if command is GET request
   char * request_type = strtok(parsed_request, " ");
@@ -220,7 +216,7 @@ void* handle_requests(void* input_params) {
   // If not, then connect with host to get response
   if ((response_size = check_cache(request_path, response) == -1)) {
     response_size = get_host_response(dest_ip, sock, request, request_size, response, client_sock);
-    add_to_cache(request, response, response_size);
+    // add_to_cache(request, response, response_size);
   }
   else {
     // Send the message response from cache back to the client
@@ -284,6 +280,10 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
 
   int total_response_size = 0;
   char temp_response[MAX_RESPONSE_LENGTH];
+
+  char * buf;
+  int bufSize = 0;
+
   while (true) {
     memset(temp_response, 0, MAX_RESPONSE_LENGTH);
     bytesRecv = recv(sock, temp_response, MAX_RESPONSE_LENGTH, 0);
@@ -293,11 +293,30 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
       exit(1);
     }
     else if (bytesRecv == 0) {
+    	//add to cache here
+	    add_to_cache(request, buf, bufSize);
       break;
     }
     else {
       total_response_size += bytesRecv;
       send(client_sock, temp_response, bytesRecv, 0);
+
+      if(buf == NULL) {
+      	cout << "null";
+      	bufSize += sizeof(temp_response);
+      	buf = (char *) malloc(sizeof(char) * (bufSize + 1));
+      	strcpy(buf, temp_response);
+      } else {
+      	cout << "not null";
+
+      	bufSize += sizeof(temp_response);
+
+      	char * bufTemp = (char *) malloc (sizeof(char) * (bufSize + 1));
+      	strcpy(bufTemp, buf);
+      	strcat(bufTemp, temp_response);
+      	free(buf);
+      	buf = bufTemp;
+      }
       
       // Do some cache stuff here
     }
