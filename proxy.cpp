@@ -59,9 +59,7 @@ typedef struct thread_params {
 
 void* handle_requests(void* input_params);
 void get_host_response(char * addr, uint16_t port, char * request, char * response);
-void send_message(int sock, char * message);
 int check_cache(char * request, char * response);
-void send_message(int sock, char * message);
 void add_to_cache(char * request, char * response);
 void removeNode (node *n);
 void setHeadNode (node *n);
@@ -96,7 +94,7 @@ int main (int argc, char* argv[])
   myCache.tail->prev = myCache.head;
 
   // Ignore SIGPIPE signals
-  signal(SIGPIPE, SIG_IGN);
+  // signal(SIGPIPE, SIG_IGN);
 
   // Create the socket connection
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -152,7 +150,7 @@ int main (int argc, char* argv[])
 
 void* handle_requests(void* input_params) {
 
-  cout << "Handling request." << endl;
+  // cout << "Handling request." << endl;
 
   int client_sock;
   char request[MAX_REQUEST_LENGTH], parsed_request[MAX_REQUEST_LENGTH], response[MAX_RESPONSE_LENGTH];
@@ -167,9 +165,9 @@ void* handle_requests(void* input_params) {
   memcpy(request, params->request, MAX_REQUEST_LENGTH);
   memcpy(parsed_request, params->request, MAX_REQUEST_LENGTH);
 
-  cout << "======== REQUEST ========" << endl;
-  cout << request << endl;
-  cout << "======== REQUEST END ========" << endl;
+  // cout << "======== REQUEST ========" << endl;
+  // cout << request << endl;
+  // cout << "======== REQUEST END ========" << endl;
 
   // Check if command is GET request
   char * request_type = strtok(parsed_request, " ");
@@ -213,16 +211,18 @@ void* handle_requests(void* input_params) {
     add_to_cache(request, response);
   // }
 
-  cout << "======= RESPONSE =======" << endl;
-  cout << response << endl;
-  cout << "======= RESPONSE END =======" << endl;
+  // cout << "======= RESPONSE =======" << endl;
+  // cout << response << endl;
+  // cout << "======= RESPONSE END =======" << endl;
 
   // Send the message response back to the client
   // send_message(client_sock, response);
+
   send(client_sock, response, MAX_RESPONSE_LENGTH, 0);
 
   // TODO: Check if Keep Alive connection while parsing and only close if not???
   close(client_sock);
+
   pthread_exit(NULL);
 
 }
@@ -259,20 +259,17 @@ void get_host_response(char * addr, uint16_t port, char * request, char * respon
 
   // Get the response from host and copy into response
   int bytesRecv = 0;
+
   if ((bytesRecv = recv(sock, response, MAX_RESPONSE_LENGTH, 0)) < 0) {
     cerr << "Error receiving from host." << endl;
     exit(1);
   }
 
-  cout << "======= PRE RESPONSE =======" << endl;
-  cout << response << endl;
-  cout << "======= PRE RESPONSE END =======" << endl;
+  // cout << "======= PRE RESPONSE =======" << endl;
+  // cout << response << endl;
+  // cout << "======= PRE RESPONSE END =======" << endl;
 
   close(sock);
-}
-
-void send_message(int sock, char * message) {
-
 }
 
 int check_cache(char * request, char * response) {
@@ -285,7 +282,7 @@ int check_cache(char * request, char * response) {
 		removeNode(n);
 		setHeadNode(n);
 		memcpy(response, n->val, sizeof n->val);
-		return 1;
+		return n->size;
 	} else {
 		return -1;
 	}
@@ -293,7 +290,7 @@ int check_cache(char * request, char * response) {
 
 void add_to_cache(char * request, char * response) {
 
-  cout << "Adding to cache." << endl;
+  // cout << "Adding to cache." << endl;
 
   node * n = myCache.nodeMap[request];
 
@@ -302,6 +299,7 @@ void add_to_cache(char * request, char * response) {
     // cout << "n: " << n->val << "\n";
 		removeNode(n);
 		n->val = response;
+		n->size = sizeof response;
 		setHeadNode(n);
 	} else {
 		if(myCache.freeNodes.empty()) {
@@ -309,12 +307,14 @@ void add_to_cache(char * request, char * response) {
 			removeNode(n);
 			myCache.nodeMap.erase(request);
 			n->val = response;
+			n->size = sizeof response;
 			myCache.nodeMap[request] = n;
 			setHeadNode(n);
 		} else {
 			n = myCache.freeNodes.back();
 			myCache.freeNodes.pop_back();
 			n->val = response;
+			n->size = sizeof response;
 			myCache.nodeMap[request] = n;
 			setHeadNode(n);
 		}
