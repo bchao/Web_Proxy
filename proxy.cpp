@@ -147,7 +147,6 @@ int main (int argc, char* argv[])
       }
     }
   }
-
   return 0;
 }
 
@@ -168,8 +167,9 @@ void* handle_requests(void* input_params) {
   memcpy(request, params->request, MAX_REQUEST_LENGTH);
   memcpy(parsed_request, params->request, MAX_REQUEST_LENGTH);
 
-  cout << "======== ORIGINAL REQUEST ========" << endl;
+  cout << "======== REQUEST ========" << endl;
   cout << request << endl;
+  cout << "======== REQUEST END ========" << endl;
 
   // Check if command is GET request
   char * request_type = strtok(parsed_request, " ");
@@ -189,9 +189,6 @@ void* handle_requests(void* input_params) {
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
 
-  cout << "====== REQUEST HOST ======" << endl;
-  cout << request_host << endl;
-
   int status;
   if ((status = getaddrinfo(request_host, "http", &hints, &my_addrinfo) != 0)) {
     cerr << "Error resolving hostname for port." << endl;
@@ -206,18 +203,19 @@ void* handle_requests(void* input_params) {
 
   freeaddrinfo(my_addrinfo);
 
-  cout << "========== DEST IP ==========" << endl;
-  cout << dest_ip << endl;
+  // cout << "========= DEST IP =========" << endl;
+  // cout << dest_ip << endl;
 
   // Check if cache contains request, if so grab corresponding response
   // If not, then connect with host to get response
-  if (check_cache(request_path, response) != 1) {
+  // if (check_cache(request_path, response) != 1) {
     get_host_response(dest_ip, my_sockaddr->sin_port, request, response);
     add_to_cache(request, response);
-  }
+  // }
 
-  cout << "===== RESPONSE =====" << endl;
+  cout << "======= RESPONSE =======" << endl;
   cout << response << endl;
+  cout << "======= RESPONSE END =======" << endl;
 
   // Send the message response back to the client
   // send_message(client_sock, response);
@@ -266,6 +264,11 @@ void get_host_response(char * addr, uint16_t port, char * request, char * respon
     exit(1);
   }
 
+  cout << "======= PRE RESPONSE =======" << endl;
+  cout << response << endl;
+  cout << "======= PRE RESPONSE END =======" << endl;
+
+  close(sock);
 }
 
 void send_message(int sock, char * message) {
