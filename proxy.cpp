@@ -140,6 +140,8 @@ int main (int argc, char* argv[])
       memset(params.request, 0, MAX_REQUEST_LENGTH);
       memcpy(params.request, request, MAX_REQUEST_LENGTH);
 
+      cout << "main: " << request;
+
       // Use pthread_create to make new thread to and call requestThread
       pthread_t client_thread;
 
@@ -155,7 +157,7 @@ int main (int argc, char* argv[])
 
 void* handle_requests(void* input_params) {
 
-  cout << "Handling request." << endl;
+  // cout << "Handling request." << endl;
 
   int client_sock, sock;
   socklen_t response_size, request_size;
@@ -172,9 +174,11 @@ void* handle_requests(void* input_params) {
   memcpy(request, params->request, MAX_REQUEST_LENGTH);
   memcpy(parsed_request, params->request, MAX_REQUEST_LENGTH);
 
-  cout << "======== REQUEST ========" << endl;
-  cout << request << endl;
-  cout << "======== REQUEST END ========" << endl;
+  // cout << "======== REQUEST ========" << endl;
+  // cout << request << endl;
+  // cout << "======== REQUEST END ========" << endl;
+
+  cout << "not main: " << request;
 
   // Check if command is GET request
   char * request_type = strtok(parsed_request, " ");
@@ -219,9 +223,9 @@ void* handle_requests(void* input_params) {
   //   add_to_cache(request, response, response_size);
   // }
 
-  cout << "======= RESPONSE =======" << endl;
-  cout << response << endl;
-  cout << "======= RESPONSE END =======" << endl;
+  // cout << "======= RESPONSE =======" << endl;
+  // cout << response << endl;
+  // cout << "======= RESPONSE END =======" << endl;
 
   // if (strcmp(response, "\r\n") == 0) {
   //   char close[MAX_RESPONSE_LENGTH];
@@ -310,7 +314,7 @@ int check_cache(char * request, char * response) {
 		removeNode(n);
 		setHeadNode(n);
 		memcpy(response, n->val, sizeof n->val);
-		return 1;
+		return n->size;
 	} else {
 		return -1;
 	}
@@ -318,7 +322,7 @@ int check_cache(char * request, char * response) {
 
 void add_to_cache(char * request, char * response, int response_size) {
 
-  cout << "Adding to cache." << endl;
+  // cout << "Adding to cache." << endl;
 
   node * n = myCache.nodeMap[request];
 
@@ -327,6 +331,7 @@ void add_to_cache(char * request, char * response, int response_size) {
     // cout << "n: " << n->val << "\n";
 		removeNode(n);
 		n->val = response;
+		n->size = response_size;
 		setHeadNode(n);
 	} else {
 		if(myCache.freeNodes.empty()) {
@@ -334,12 +339,14 @@ void add_to_cache(char * request, char * response, int response_size) {
 			removeNode(n);
 			myCache.nodeMap.erase(request);
 			n->val = response;
+			n->size = response_size;
 			myCache.nodeMap[request] = n;
 			setHeadNode(n);
 		} else {
 			n = myCache.freeNodes.back();
 			myCache.freeNodes.pop_back();
 			n->val = response;
+			n->size = response_size;
 			myCache.nodeMap[request] = n;
 			setHeadNode(n);
 		}
