@@ -60,8 +60,8 @@ typedef struct thread_params {
 /* Function Prototypes */
 
 void* handle_requests(void* input_params);
-int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response, int client_sock);
-int check_cache(char * request, char * response);
+void get_host_response(char * addr, uint16_t port, char * request, int request_size, int client_sock, char * request_path);
+int check_cache(char * request, int client_sock);
 void add_to_cache(char * request, char * response, int response_size);
 void removeNode (node *n);
 void setHeadNode (node *n);
@@ -158,7 +158,7 @@ void* handle_requests(void* input_params) {
   // cout << "Handling request." << endl;
 
   int client_sock, sock;
-  socklen_t response_size, request_size;
+  socklen_t request_size;
   char request[MAX_REQUEST_LENGTH], parsed_request[MAX_REQUEST_LENGTH], response[MAX_RESPONSE_LENGTH];
 
   memset(parsed_request, 0, MAX_REQUEST_LENGTH);
@@ -209,20 +209,12 @@ void* handle_requests(void* input_params) {
 
   freeaddrinfo(my_addrinfo);
 
-  // cout << "========= DEST IP =========" << endl;
-  // cout << dest_ip << endl;
 
-  // Check if cache contains request, if so grab corresponding response
-  // If not, then connect with host to get response
-  if ((response_size = check_cache(request_path, response) == -1)) {
-    response_size = get_host_response(dest_ip, sock, request, request_size, response, client_sock);
+  // Check if cache contains response to send
+  if (check_cache(request_path, client_sock) == -1) {
+    // If not, then connect with host to get response and send
+    get_host_response(dest_ip, sock, request, request_size, client_sock, request_path);
     // add_to_cache(request, response, response_size);
-  }
-  else {
-    // Send the message response from cache back to the client
-    
-    // cout << "Response size: " << response_size << endl;
-    // send(client_sock, response, response_size, 0);
   }
 
   // if (strcmp(response, "\r\n") == 0) {
@@ -232,16 +224,14 @@ void* handle_requests(void* input_params) {
   //   send(sock, close, sizeof(close), 0);
   // }
 
-
-
-  cout << "Closing socks" << endl;
+  cout << "Closing sockets." << endl;
   close(client_sock);
   close(sock);
   pthread_exit(NULL);
 
 }
 
-int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response, int client_sock) {
+void get_host_response(char * addr, uint16_t port, char * request, int request_size, int client_sock, char * request_path) {
 
   cout << "Getting host response." << endl;
 
@@ -273,11 +263,6 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
   }
   // Get the response from host and copy into response
   int bytesRecv = 0;
-  // if ((bytesRecv = recv(sock, response, MAX_RESPONSE_LENGTH, 0)) < 0) {
-  //   cerr << "Error receiving from host." << endl;
-  //   exit(1);
-  // }
-
   int total_response_size = 0;
   char temp_response[MAX_RESPONSE_LENGTH];
 
@@ -292,28 +277,29 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
       cerr << "Error receiving from host" << endl;
       exit(1);
     }
-    else if (bytesRecv == 0) {
-    	//add to cache here
-	    add_to_cache(request, buf, bufSize);
-      break;
-    }
+	else if (bytesRecv == 0) {
+		//add to cache here
+		add_to_cache(request_path, buf, bufSize);
+		free(buf);
+		break;
+	}
     else {
       total_response_size += bytesRecv;
       send(client_sock, temp_response, bytesRecv, 0);
 
       if(buf == NULL) {
-      	cout << "null";
+      	// cout << "null";
       	bufSize += sizeof(temp_response);
       	buf = (char *) malloc(sizeof(char) * (bufSize + 1));
       	strcpy(buf, temp_response);
       } else {
-      	cout << "not null";
+      	// cout << "not null";
 
       	bufSize += sizeof(temp_response);
 
       	char * bufTemp = (char *) malloc (sizeof(char) * (bufSize + 1));
       	strcpy(bufTemp, buf);
-      	strcat(bufTemp, temp_response);
+      	strcpy(bufTemp + sizeof(temp_response), temp_response);
       	free(buf);
       	buf = bufTemp;
       }
@@ -323,21 +309,33 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
   }
 
   // close(sock);
-  return total_response_size;
 }
 
-int check_cache(char * request, char * response) {
+int check_cache(char * request, int client_sock) {
 
   cout << "Checking cache." << endl;
+  // node * n  = myCache.nodeMap.find(request)->second;
+  node * n = myCache.nodeMap[request];
+	if (n) {
+		cout << "FOUND\n";
 
-  node * n  = myCache.nodeMap.find(request)->second;
-
-	if(n) {
 		removeNode(n);
 		setHeadNode(n);
-		memcpy(response, n->val, sizeof n->val);
-		return n->size;
-	} else {
+
+		// Send response to client
+		int response_size = n->size;
+		char response[response_size];
+		int sent = 0;
+		memcpy(response, n->val, response_size);
+
+		while (sent != response_size) {
+			sent = send(client_sock, (void *) response, response_size, 0);
+		}
+
+		return 1;
+	}
+	else {
+		cout << "NOT FOUND\n";
 		return -1;
 	}
 }
