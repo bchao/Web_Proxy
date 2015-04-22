@@ -279,7 +279,11 @@ void get_host_response(char * addr, uint16_t port, char * request, int request_s
     }
 	else if (bytesRecv == 0) {
 		//add to cache here
-		add_to_cache(request_path, buf, bufSize);
+		add_to_cache(request_path, buf, total_response_size);
+
+    cout << "===== RESPONSE BEING ADDED of size " << total_response_size << endl;
+    cout << buf << endl;
+
 		free(buf);
 		break;
 	}
@@ -290,14 +294,14 @@ void get_host_response(char * addr, uint16_t port, char * request, int request_s
       if(buf == NULL) {
       	// cout << "null";
       	bufSize += sizeof(temp_response);
-      	buf = (char *) malloc(sizeof(char) * (bufSize + 1));
+      	buf = (char *) malloc (bufSize + 1);
       	strcpy(buf, temp_response);
       } else {
       	// cout << "not null";
 
       	bufSize += sizeof(temp_response);
 
-      	char * bufTemp = (char *) malloc (sizeof(char) * (bufSize + 1));
+      	char * bufTemp = (char *) malloc (bufSize + 1);
       	strcpy(bufTemp, buf);
       	strcpy(bufTemp + sizeof(temp_response), temp_response);
       	free(buf);
@@ -317,16 +321,23 @@ int check_cache(char * request, int client_sock) {
   // node * n  = myCache.nodeMap.find(request)->second;
   node * n = myCache.nodeMap[request];
 	if (n) {
-		cout << "FOUND\n";
+		cout << "FOUND" << endl;
 
 		removeNode(n);
 		setHeadNode(n);
-
 		// Send response to client
 		int response_size = n->size;
+
+    cout << "RESPONSE SIZE" << endl;
+    cout << response_size << endl;
+
 		char response[response_size];
+
 		int sent = 0;
 		memcpy(response, n->val, response_size);
+
+    cout << "RESPONSE FROM CACHE" << endl;
+    cout << response << endl;
 
 		while (sent != response_size) {
 			sent = send(client_sock, (void *) response, response_size, 0);
@@ -335,7 +346,7 @@ int check_cache(char * request, int client_sock) {
 		return 1;
 	}
 	else {
-		cout << "NOT FOUND\n";
+		cout << "NOT FOUND" << endl;
 		return -1;
 	}
 }
