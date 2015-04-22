@@ -7,6 +7,7 @@
 #include <string>
 #include <netdb.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <cstring>
 #include <signal.h>
@@ -53,16 +54,15 @@ LRUCache_t myCache;
 typedef struct thread_params {
   int sock;
   char request[MAX_REQUEST_LENGTH];
+  int request_size;
 } thread_params_t;
 
 /* Function Prototypes */
 
 void* handle_requests(void* input_params);
-void get_host_response(char * addr, uint16_t port, char * request, char * response);
-void send_message(int sock, char * message);
+int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response);
 int check_cache(char * request, char * response);
-void send_message(int sock, char * message);
-void add_to_cache(char * request, char * response);
+void add_to_cache(char * request, char * response, int response_size);
 void removeNode (node *n);
 void setHeadNode (node *n);
 
@@ -73,6 +73,8 @@ int main (int argc, char* argv[])
   struct sockaddr_in server_addr;
   char request[MAX_REQUEST_LENGTH];
 
+  memset(request, 0, MAX_REQUEST_LENGTH);
+
   // Check to see if correct number of inputs
   if (argc != 3) {
     cerr << "Wrong number of arguments." << endl;
@@ -81,7 +83,7 @@ int main (int argc, char* argv[])
 
   // Save server port and cache size as global variables
   server_port = atoi(argv[1]);
-  cache_size = atoi(argv[2]);
+  cache_size = atoi(argv[2]) * 1000000;
 
   // Initialize LRU Cache
   myCache.entries = new node[cache_size];
@@ -96,7 +98,7 @@ int main (int argc, char* argv[])
   myCache.tail->prev = myCache.head;
 
   // Ignore SIGPIPE signals
-  signal(SIGPIPE, SIG_IGN);
+  //signal(SIGPIPE, SIG_IGN);
 
   // Create the socket connection
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -134,6 +136,7 @@ int main (int argc, char* argv[])
 
       memset(&params, 0, sizeof(params));
       params.sock = client_sock;
+      params.request_size = len;
       memset(params.request, 0, MAX_REQUEST_LENGTH);
       memcpy(params.request, request, MAX_REQUEST_LENGTH);
 
@@ -154,7 +157,8 @@ void* handle_requests(void* input_params) {
 
   cout << "Handling request." << endl;
 
-  int client_sock;
+  int client_sock, sock;
+  socklen_t response_size, request_size;
   char request[MAX_REQUEST_LENGTH], parsed_request[MAX_REQUEST_LENGTH], response[MAX_RESPONSE_LENGTH];
 
   memset(parsed_request, 0, MAX_REQUEST_LENGTH);
@@ -164,6 +168,7 @@ void* handle_requests(void* input_params) {
   // Copy data from input params
   thread_params_t * params = (thread_params_t *) input_params;
   client_sock = params->sock;
+  request_size = params->request_size;
   memcpy(request, params->request, MAX_REQUEST_LENGTH);
   memcpy(parsed_request, params->request, MAX_REQUEST_LENGTH);
 
@@ -200,6 +205,7 @@ void* handle_requests(void* input_params) {
   struct sockaddr_in * my_sockaddr = (struct sockaddr_in *) my_addrinfo->ai_addr;
   char dest_ip[INET_ADDRSTRLEN];
   inet_ntop(AF_INET, &(my_sockaddr->sin_addr), dest_ip, INET_ADDRSTRLEN);
+  sock = my_sockaddr->sin_port;
 
   freeaddrinfo(my_addrinfo);
 
@@ -208,26 +214,34 @@ void* handle_requests(void* input_params) {
 
   // Check if cache contains request, if so grab corresponding response
   // If not, then connect with host to get response
-  // if (check_cache(request_path, response) != 1) {
-    get_host_response(dest_ip, my_sockaddr->sin_port, request, response);
-    add_to_cache(request, response);
+  // if ((response_size = check_cache(request_path, response) == -1)) {
+    response_size = get_host_response(dest_ip, sock, request, request_size, response);
+    add_to_cache(request, response, response_size);
   // }
 
   cout << "======= RESPONSE =======" << endl;
   cout << response << endl;
   cout << "======= RESPONSE END =======" << endl;
 
+  if (strcmp(response, "\r\n") == 0) {
+    char close[MAX_RESPONSE_LENGTH];
+    sprintf(close, "Connection: close\r\n");
+    send(client_sock, close, sizeof(close), 0);
+    send(sock, close, sizeof(close), 0);
+  }
+
   // Send the message response back to the client
   // send_message(client_sock, response);
-  send(client_sock, response, MAX_RESPONSE_LENGTH, 0);
+  send(client_sock, response, response_size, 0);
 
   // TODO: Check if Keep Alive connection while parsing and only close if not???
   close(client_sock);
+  close(sock);
   pthread_exit(NULL);
 
 }
 
-void get_host_response(char * addr, uint16_t port, char * request, char * response) {
+int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response) {
 
   cout << "Getting host response." << endl;
 
@@ -252,7 +266,7 @@ void get_host_response(char * addr, uint16_t port, char * request, char * respon
   }
 
   // Forward the request message to host
-  if (send(sock, request, MAX_REQUEST_LENGTH, 0) < 0) {
+  if (send(sock, request, request_size, 0) < 0) {
     cerr << "Error sending to host." << endl;
     exit(1);
   }
@@ -264,15 +278,12 @@ void get_host_response(char * addr, uint16_t port, char * request, char * respon
     exit(1);
   }
 
-  cout << "======= PRE RESPONSE =======" << endl;
-  cout << response << endl;
-  cout << "======= PRE RESPONSE END =======" << endl;
+  // cout << "======= PRE RESPONSE =======" << endl;
+  // cout << response << endl;
+  // cout << "======= PRE RESPONSE END =======" << endl;
 
   close(sock);
-}
-
-void send_message(int sock, char * message) {
-
+  return bytesRecv;
 }
 
 int check_cache(char * request, char * response) {
@@ -291,7 +302,7 @@ int check_cache(char * request, char * response) {
 	}
 }
 
-void add_to_cache(char * request, char * response) {
+void add_to_cache(char * request, char * response, int response_size) {
 
   cout << "Adding to cache." << endl;
 
