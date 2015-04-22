@@ -60,7 +60,7 @@ typedef struct thread_params {
 /* Function Prototypes */
 
 void* handle_requests(void* input_params);
-int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response);
+int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response, int client_sock);
 int check_cache(char * request, char * response);
 void add_to_cache(char * request, char * response, int response_size);
 void removeNode (node *n);
@@ -98,7 +98,7 @@ int main (int argc, char* argv[])
   myCache.tail->prev = myCache.head;
 
   // Ignore SIGPIPE signals
-  //signal(SIGPIPE, SIG_IGN);
+  // signal(SIGPIPE, SIG_IGN);
 
   // Create the socket connection
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -215,33 +215,32 @@ void* handle_requests(void* input_params) {
   // Check if cache contains request, if so grab corresponding response
   // If not, then connect with host to get response
   // if ((response_size = check_cache(request_path, response) == -1)) {
-    response_size = get_host_response(dest_ip, sock, request, request_size, response);
-    add_to_cache(request, response, response_size);
+    response_size = get_host_response(dest_ip, sock, request, request_size, response, client_sock);
+  //   add_to_cache(request, response, response_size);
   // }
 
   cout << "======= RESPONSE =======" << endl;
   cout << response << endl;
   cout << "======= RESPONSE END =======" << endl;
 
-  if (strcmp(response, "\r\n") == 0) {
-    char close[MAX_RESPONSE_LENGTH];
-    sprintf(close, "Connection: close\r\n");
-    send(client_sock, close, sizeof(close), 0);
-    send(sock, close, sizeof(close), 0);
-  }
+  // if (strcmp(response, "\r\n") == 0) {
+  //   char close[MAX_RESPONSE_LENGTH];
+  //   sprintf(close, "Connection: close\r\n");
+  //   send(client_sock, close, sizeof(close), 0);
+  //   send(sock, close, sizeof(close), 0);
+  // }
 
   // Send the message response back to the client
-  // send_message(client_sock, response);
-  send(client_sock, response, response_size, 0);
+  // cout << "Response size: " << response_size << endl;
+  // send(client_sock, response, response_size, 0);
 
-  // TODO: Check if Keep Alive connection while parsing and only close if not???
   close(client_sock);
   close(sock);
   pthread_exit(NULL);
 
 }
 
-int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response) {
+int get_host_response(char * addr, uint16_t port, char * request, int request_size, char * response, int client_sock) {
 
   cout << "Getting host response." << endl;
 
@@ -266,6 +265,7 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
   }
 
   // Forward the request message to host
+  cout << "Request size: " << request_size << endl;
   if (send(sock, request, request_size, 0) < 0) {
     cerr << "Error sending to host." << endl;
     exit(1);
@@ -273,17 +273,31 @@ int get_host_response(char * addr, uint16_t port, char * request, int request_si
 
   // Get the response from host and copy into response
   int bytesRecv = 0;
-  if ((bytesRecv = recv(sock, response, MAX_RESPONSE_LENGTH, 0)) < 0) {
-    cerr << "Error receiving from host." << endl;
-    exit(1);
+  // if ((bytesRecv = recv(sock, response, MAX_RESPONSE_LENGTH, 0)) < 0) {
+  //   cerr << "Error receiving from host." << endl;
+  //   exit(1);
+  // }
+
+  int total_response_size = 0;
+  char temp_response[MAX_RESPONSE_LENGTH];
+  while (true) {
+    memset(temp_response, 0, MAX_RESPONSE_LENGTH);
+    bytesRecv = recv(sock, temp_response, MAX_RESPONSE_LENGTH, 0);
+    if (bytesRecv < 0) {
+      cerr << "Error receiving from host" << endl;
+      exit(1);
+    }
+    else if (bytesRecv == 0) {
+      break;
+    }
+    else {
+      total_response_size += bytesRecv;
+      send(client_sock, temp_response, bytesRecv, 0);
+    }
   }
 
-  // cout << "======= PRE RESPONSE =======" << endl;
-  // cout << response << endl;
-  // cout << "======= PRE RESPONSE END =======" << endl;
-
-  close(sock);
-  return bytesRecv;
+  // close(sock);
+  return total_response_size;
 }
 
 int check_cache(char * request, char * response) {
