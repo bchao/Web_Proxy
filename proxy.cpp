@@ -19,8 +19,8 @@ using namespace std;
 /* Global Variables */
 
 #define MAX_BACK_LOG (5)
-#define MAX_REQUEST_LENGTH (1024)
-#define MAX_RESPONSE_LENGTH (8192)
+#define MAX_REQUEST_LENGTH (4096)
+#define MAX_RESPONSE_LENGTH (524288)
 int server_port;
 int cache_size;
 
@@ -50,7 +50,7 @@ typedef struct thread_params {
 /* Function Prototypes */
 
 void* handle_requests(void* input_params);
-void get_host_response(char * request, char * response);
+void get_host_response(char * addr, uint16_t port, char * request, char * response);
 void send_message(int sock, char * message);
 int check_cache(char * request, char * response);
 void send_message(int sock, char * message);
@@ -86,7 +86,6 @@ int main (int argc, char* argv[])
   myCache.head->next = myCache.tail;
   myCache.tail->next = NULL;
   myCache.tail->prev = myCache.head;
-
 
   // Ignore SIGPIPE signals
   signal(SIGPIPE, SIG_IGN);
@@ -147,9 +146,12 @@ int main (int argc, char* argv[])
 
 void* handle_requests(void* input_params) {
 
-  int client_sock;
-  char request[MAX_REQUEST_LENGTH], response[MAX_RESPONSE_LENGTH];
+  cout << "Handling request." << endl;
 
+  int client_sock;
+  char request[MAX_REQUEST_LENGTH], parsed_request[MAX_REQUEST_LENGTH], response[MAX_RESPONSE_LENGTH];
+
+  memset(parsed_request, 0, MAX_REQUEST_LENGTH);
   memset(request, 0, MAX_REQUEST_LENGTH);
   memset(response, 0, MAX_RESPONSE_LENGTH);
 
@@ -157,12 +159,13 @@ void* handle_requests(void* input_params) {
   thread_params_t * params = (thread_params_t *) input_params;
   client_sock = params->sock;
   memcpy(request, params->request, MAX_REQUEST_LENGTH);
+  memcpy(parsed_request, params->request, MAX_REQUEST_LENGTH);
 
-  cout << "======== REQUEST ========" << endl;
+  cout << "======== ORIGINAL REQUEST ========" << endl;
   cout << request << endl;
 
   // Check if command is GET request
-  char * request_type = strtok(request, " ");
+  char * request_type = strtok(parsed_request, " ");
   if (strcmp(request_type, "GET") != 0) {
     cout << "Not GET command." << endl;
     return NULL;
@@ -172,16 +175,20 @@ void* handle_requests(void* input_params) {
   char * request_path = strtok(NULL, " ");
   strtok(NULL, "\n");
   strtok(NULL, " ");
-  char * request_host = strtok(NULL, " ");
+  char * request_host = strtok(NULL, "\r");
 
-  struct addrinfo * my_addrinfo;
-  struct addrinfo hints;
-  memset (&hints, 0, sizeof (hints));
+  struct addrinfo hints, *my_addrinfo;
+  memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
 
-  if (getaddrinfo(request_host, "http", &hints, &my_addrinfo)) {
+  cout << "====== REQUEST HOST ======" << endl;
+  cout << request_host << endl;
+
+  int status;
+  if ((status = getaddrinfo(request_host, "http", &hints, &my_addrinfo) != 0)) {
     cerr << "Error resolving hostname for port." << endl;
+    // cerr << gai_strerror(status) << endl;
     return NULL;
   }
 
@@ -192,39 +199,65 @@ void* handle_requests(void* input_params) {
 
   freeaddrinfo(my_addrinfo);
 
-  cout << "============= DEST IP ==============" << endl;
+  cout << "========== DEST IP ==========" << endl;
   cout << dest_ip << endl;
 
   // Check if cache contains request, if so grab corresponding response
-  check_cache(request_path, response);
-
   // If not, then connect with host to get response
-  if (response == NULL) {
-    get_host_response(request, response);
+  if (check_cache(request_path, response) != 1) {
+    get_host_response(dest_ip, my_sockaddr->sin_port, request, response);
+    add_to_cache(request, response);
   }
 
   cout << "===== RESPONSE =====" << endl;
   cout << response << endl;
 
   // Send the message response back to the client
-  send_message(client_sock, response);
+  // send_message(client_sock, response);
+  send(client_sock, response, MAX_RESPONSE_LENGTH, 0);
 
+  // TODO: Check if Keep Alive connection while parsing and only close if not???
   close(client_sock);
   pthread_exit(NULL);
 
 }
 
-void get_host_response(char * request, char * response) {
+void get_host_response(char * addr, uint16_t port, char * request, char * response) {
 
-  // Extract host IP address from message
+  cout << "Getting host response." << endl;
+
+  int sock;
+  struct sockaddr_in server_addr;
 
   // Create socket
+  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    cerr << "Error creating socket." << endl;
+    exit(1);
+  }
+
+  // Set fields for socket
+  server_addr.sin_addr.s_addr = inet_addr(addr);
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = port;
 
   // Connect to host
+  if (connect(sock, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0) {
+    cerr << "Error connecting to host." << endl;
+    exit(1);
+  }
 
   // Forward the request message to host
+  if (send(sock, request, MAX_REQUEST_LENGTH, 0) < 0) {
+    cerr << "Error sending to host." << endl;
+    exit(1);
+  }
 
-  // Get the response from host and return
+  // Get the response from host and copy into response
+  int bytesRecv = 0;
+  if ((bytesRecv = recv(sock, response, MAX_RESPONSE_LENGTH, 0)) < 0) {
+    cerr << "Error receiving from host." << endl;
+    exit(1);
+  }
 
 }
 
@@ -233,6 +266,9 @@ void send_message(int sock, char * message) {
 }
 
 int check_cache(char * request, char * response) {
+
+  cout << "Checking cache." << endl;
+
 	node * n = myCache.nodeMap[request];
 
 	if(n) {
@@ -246,6 +282,9 @@ int check_cache(char * request, char * response) {
 }
 
 void add_to_cache(char * request, char * response) {
+
+  cout << "Adding to cache." << endl;
+
 	node * newNode = myCache.nodeMap[request];
 
 	// if node with key 'request' is found
