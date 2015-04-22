@@ -33,7 +33,15 @@ struct node {
 };
 
 typedef struct LRUCache {
-	map<char *, node*> nodeMap;
+	struct cmp_str
+		{
+			bool operator()(char const *a, char const *b)
+		{
+			return std::strcmp(a, b) < 0;
+		}
+	};
+
+	map<char *, node*, cmp_str> nodeMap;
 	vector<node*> freeNodes;
 	node * head;
 	node * tail;
@@ -49,14 +57,14 @@ typedef struct thread_params {
 
 /* Function Prototypes */
 
-void* handle_requests(void* input_params);
-void get_host_response(char * request, char * response);
-void send_message(int sock, char * message);
-int check_cache(char * request, char * response);
-void send_message(int sock, char * message);
-void add_to_cache(char * request, char * response);
-void removeNode (node *n);
-void setHeadNode (node *n);
+void*	handle_requests(void* input_params);
+void	get_host_response(char * request, char * response);
+void	send_message(int sock, char * message);
+int 	check_cache(char * request, char * response);
+void 	send_message(int sock, char * message);
+void 	add_to_cache(char * request, char * response);
+void 	removeNode (node *n);
+void 	setHeadNode (node *n);
 
 int main (int argc, char* argv[])
 {
@@ -142,7 +150,6 @@ int main (int argc, char* argv[])
   }
 
   return 0;
-
 }
 
 void* handle_requests(void* input_params) {
@@ -233,12 +240,12 @@ void send_message(int sock, char * message) {
 }
 
 int check_cache(char * request, char * response) {
-	node * n = myCache.nodeMap[request];
+  node * n  = myCache.nodeMap.find(request)->second;
 
 	if(n) {
 		removeNode(n);
 		setHeadNode(n);
-    memcpy(response, n->val, MAX_RESPONSE_LENGTH);
+		memcpy(response, n->val, sizeof n->val);
 		return 1;
 	} else {
 		return -1;
@@ -246,27 +253,28 @@ int check_cache(char * request, char * response) {
 }
 
 void add_to_cache(char * request, char * response) {
-	node * newNode = myCache.nodeMap[request];
+  node * n = myCache.nodeMap[request];
 
 	// if node with key 'request' is found
-	if(newNode) {
-		removeNode(newNode);
-		newNode->val = response;
-		setHeadNode(newNode);
+	if(n) {
+    // cout << "n: " << n->val << "\n";
+		removeNode(n);
+		n->val = response;
+		setHeadNode(n);
 	} else {
 		if(myCache.freeNodes.empty()) {
-			newNode = myCache.tail->prev;
-			removeNode(newNode);
+			n = myCache.tail->prev;
+			removeNode(n);
 			myCache.nodeMap.erase(request);
-			newNode->val = response;
-			myCache.nodeMap[request] = newNode;
-			setHeadNode(newNode);
+			n->val = response;
+			myCache.nodeMap[request] = n;
+			setHeadNode(n);
 		} else {
-			newNode = myCache.freeNodes.back();
+			n = myCache.freeNodes.back();
 			myCache.freeNodes.pop_back();
-			newNode->val = response;
-			myCache.nodeMap[request] = newNode;
-			setHeadNode(newNode);
+			n->val = response;
+			myCache.nodeMap[request] = n;
+			setHeadNode(n);
 		}
 	}
 }
